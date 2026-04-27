@@ -288,15 +288,20 @@ else
             "RU,CN,BY,AU,IN,NG,KP"
     fi
 
-    # ---- Backblaze B2 ----
+    # ---- Backups (restic → Backblaze B2) ----
     echo
-    info "Backblaze B2 backups (leave empty to configure later)"
-    prompt B2_BUCKET "B2 bucket name" ""
+    info "Nightly backups (restic → Backblaze B2): encrypted, 7 daily + 12 monthly snapshots."
+    prompt_yes_no INSTALL_BACKUPS "Install backups?" "y"
+    B2_BUCKET=""
     B2_ACCOUNT_ID=""
     B2_ACCOUNT_KEY=""
-    if [[ -n "${B2_BUCKET}" ]]; then
-        prompt_required B2_ACCOUNT_ID  "B2 application key ID"
-        prompt_secret    B2_ACCOUNT_KEY "B2 application key"
+    if [[ "${INSTALL_BACKUPS}" == "yes" ]]; then
+        info "B2 credentials (leave bucket empty to install the backup script now and add creds later)"
+        prompt B2_BUCKET "B2 bucket name" ""
+        if [[ -n "${B2_BUCKET}" ]]; then
+            prompt_required B2_ACCOUNT_ID  "B2 application key ID"
+            prompt_secret    B2_ACCOUNT_KEY "B2 application key"
+        fi
     fi
 
     echo
@@ -397,6 +402,7 @@ PMA_HOST="${PMA_HOST}"
 PGA_HOST="${PGA_HOST}"
 
 # === Backups (Backblaze B2) ===
+INSTALL_BACKUPS="${INSTALL_BACKUPS}"
 B2_ACCOUNT_ID="${B2_ACCOUNT_ID}"
 B2_ACCOUNT_KEY="${B2_ACCOUNT_KEY}"
 B2_BUCKET="${B2_BUCKET}"

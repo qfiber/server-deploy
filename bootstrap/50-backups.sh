@@ -17,6 +17,13 @@ source "${REPO_DIR}/lib/common.sh"
 require_root
 load_config
 
+if [[ "${INSTALL_BACKUPS:-yes}" != "yes" ]]; then
+    info "Backups not selected (INSTALL_BACKUPS=${INSTALL_BACKUPS:-no}) — skipping."
+    # Tear down a previous install if the operator turned backups off
+    rm -f /etc/cron.d/serverdeploy-backup /usr/local/bin/backup.sh
+    exit 0
+fi
+
 RESTIC_PASSWORD_FILE=/etc/serverdeploy/restic.password
 BACKUP_SCRIPT=/usr/local/bin/backup.sh
 
