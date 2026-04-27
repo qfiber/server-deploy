@@ -1,0 +1,59 @@
+name: CRS bump
+
+on:
+  schedule:
+    # Weekly Sunday 07:00 UTC
+    - cron: '0 7 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect current + latest CRS version
+        id: ver
+        run: |
+          set -e
+          current=$(grep -oP 'CRS_VERSION:-\K[^"}]+' bootstrap/10-caddy.sh | head -1)
+          latest=$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/coreruleset/coreruleset/releases/latest \
+            | jq -r .tag_name)
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+          echo "Current pinned : ${current}"
+          echo "Latest upstream: ${latest}"
+
+      - name: Open PR if behind
+        if: steps.ver.outputs.current != steps.ver.outputs.latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT: ${{ steps.ver.outputs.current }}
+          LATEST: ${{ steps.ver.outputs.latest }}
+        run: |
+          set -e
+          branch="ci/crs-${LATEST}"
+
+          # Bail if branch already exists on origin (PR already opened)
+          if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+            echo "Branch ${branch} already exists upstream — skipping."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          sed -i "s|CRS_VERSION:-${CURRENT}|CRS_VERSION:-${LATEST}|" bootstrap/10-caddy.sh
+          git add bootstrap/10-caddy.sh
+          git commit -m "ci: bump OWASP CRS ${CURRENT} → ${LATEST}"
+          git push origin "${branch}"
+          gh pr create \
+            --title "ci: bump OWASP CRS ${CURRENT} → ${LATEST}" \
+            --body "Automated bump from $(date -u -Iseconds).\n\nUpstream: https://github.com/coreruleset/coreruleset/releases/tag/${LATEST}\n\nThe runtime cron \`/usr/local/bin/serverdeploy-crs-refresh\` already auto-refreshes CRS quarterly on deployed servers; this PR keeps the install-time pinned default current." \
+            --label dependencies

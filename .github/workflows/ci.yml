@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bash-syntax:
+    name: bash -n (syntax)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax-check every shell script
+        run: |
+          set -e
+          rc=0
+          while IFS= read -r f; do
+            if ! bash -n "$f"; then
+              echo "::error file=$f::bash -n failed"
+              rc=1
+            fi
+          done < <(find . -type f -name '*.sh' -not -path './.git/*')
+          exit $rc
+
+  shellcheck-error:
+    name: shellcheck (errors block merge)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+      - name: shellcheck --severity=error
+        run: |
+          set -e
+          shellcheck \
+            --shell=bash \
+            --severity=error \
+            --external-sources \
+            -e SC1090,SC1091 \
+            $(find . -type f -name '*.sh' -not -path './.git/*')
+
+  shellcheck-warn:
+    name: shellcheck (warnings — non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+      - name: shellcheck --severity=warning
+        run: |
+          shellcheck \
+            --shell=bash \
+            --severity=warning \
+            --external-sources \
+            -e SC1090,SC1091,SC2012,SC2015,SC2034,SC2153,SC2317 \
+            $(find . -type f -name '*.sh' -not -path './.git/*') \
+            || echo "::warning::shellcheck warnings present — see job log"
+
+  shfmt:
+    name: shfmt (format — non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shfmt
+        run: |
+          curl -fsSL -o /tmp/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.8.0/shfmt_v3.8.0_linux_amd64
+          chmod +x /tmp/shfmt
+          sudo mv /tmp/shfmt /usr/local/bin/shfmt
+      - name: shfmt --diff
+        run: |
+          set +e
+          shfmt -d -i 4 -ci -bn $(find . -type f -name '*.sh' -not -path './.git/*')
+          if [ $? -ne 0 ]; then
+            echo "::warning::shfmt formatting differences detected — run 'shfmt -w -i 4 -ci -bn .' locally"
+          fi
+          exit 0
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  markdown-links:
+    name: markdown-link-check (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check links in README and docs
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'

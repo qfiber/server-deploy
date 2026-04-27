@@ -1,0 +1,12 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^https?://(srv1\\.)?example\\." },
+    { "pattern": "^https?://<" },
+    { "pattern": "^https?://[^/]+\\.local" }
+  ],
+  "timeout": "10s",
+  "retryOn429": true,
+  "retryCount": 2,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 301, 302, 308, 401, 403]
+}
