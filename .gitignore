@@ -1,0 +1,26 @@
+# Editor / OS
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Local backups left by editors / scripts
+*.bak
+*.bak.*
+*.tmp
+*.orig
+
+# Claude Code working state
+.claude/
+
+# Anything that looks like a secret — defence in depth even though
+# /etc/serverdeploy/config lives on the deployed server, not in the repo
+*.password
+*-admin.txt
+*-basic-auth.txt
+*.pem
+*.key
+.env
+.env.*
