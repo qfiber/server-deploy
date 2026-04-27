@@ -255,6 +255,32 @@ chown root:"${CADDY_GROUP}" "${CADDY_CONF}/Caddyfile"
 chmod 640 "${CADDY_CONF}/Caddyfile"
 success "Caddyfile written."
 
+# Snippet placeholders — required for the Caddyfile to validate even on a
+# fresh install (the live versions get rendered later by 6b/6c and the
+# weekly cdn-refresh / geoblock.sh).
+mkdir -p "${CADDY_CONF}/snippets"
+if [[ ! -f "${CADDY_CONF}/snippets/trusted_cdn.caddy" ]]; then
+    cat > "${CADDY_CONF}/snippets/trusted_cdn.caddy" <<'TC'
+(trusted_cdn) {
+    servers {
+        trusted_proxies static 127.0.0.1/32 ::1/128
+    }
+}
+TC
+fi
+if [[ ! -f "${CADDY_CONF}/snippets/geoblock.caddy" ]]; then
+    cat > "${CADDY_CONF}/snippets/geoblock.caddy" <<'GB'
+(geoblock) {
+    # GeoIP disabled or not yet configured. No-op snippet so 'import geoblock'
+    # in site files keeps working until 45-geoip.sh runs and geoblock.sh
+    # rewrites this file.
+}
+GB
+fi
+chown -R root:caddy "${CADDY_CONF}/snippets"
+chmod 750 "${CADDY_CONF}/snippets"
+chmod 640 "${CADDY_CONF}/snippets/"*.caddy
+
 "${CADDY_BIN}" fmt --overwrite "${CADDY_CONF}/Caddyfile" 2>/dev/null || true
 info "Validating Caddyfile..."
 "${CADDY_BIN}" validate --config "${CADDY_CONF}/Caddyfile" --adapter caddyfile 2>&1 \
