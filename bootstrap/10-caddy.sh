@@ -39,8 +39,13 @@ TMP_BIN="$(mktemp)"
 curl -fsSL --retry 3 -o "${TMP_BIN}" "${DL_URL}" || die "Failed to download Caddy."
 chmod +x "${TMP_BIN}"
 "${TMP_BIN}" version >/dev/null 2>&1 || die "Downloaded Caddy is not executable."
-mv "${TMP_BIN}" "${CADDY_BIN}"
-chmod 755 "${CADDY_BIN}"
+install -m 0755 -o root -g root "${TMP_BIN}" "${CADDY_BIN}"
+rm -f "${TMP_BIN}"
+# mktemp lands the binary under tmp_t — without restoring context, systemd
+# refuses to exec it ("Permission denied", status=203/EXEC).
+if command -v restorecon >/dev/null 2>&1; then
+    restorecon -v "${CADDY_BIN}" >/dev/null 2>&1 || true
+fi
 success "Caddy installed → ${CADDY_BIN} ($("${CADDY_BIN}" version | head -1))"
 
 # -----------------------------------------------------------------------------
