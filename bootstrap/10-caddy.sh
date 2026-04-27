@@ -458,6 +458,12 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable caddy
+
+# `caddy validate` (run as root above) opens the global log file and creates
+# /var/log/caddy/caddy.log as root:root 0600. Re-chown so the caddy user can
+# append to it once systemd starts the daemon under User=caddy.
+chown -R "${CADDY_USER}:${CADDY_GROUP}" "${CADDY_LOG}"
+
 systemctl restart caddy
 sleep 2
 systemctl is-active --quiet caddy || die "Caddy failed to start. journalctl -u caddy -n 50"
