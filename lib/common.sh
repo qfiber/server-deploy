@@ -217,8 +217,9 @@ detect_public_ip() {
 # Resolve A record for $1 against a public resolver (1.1.1.1).
 # Echoes IP or empty.
 resolve_a() {
-    local host="$1"
-    dig +short +time=2 +tries=1 A "${host}" @1.1.1.1 2>/dev/null | grep -E '^[0-9]+\.' | head -1
+    local host="$1" out
+    out=$(dig +short +time=2 +tries=1 A "${host}" @1.1.1.1 2>/dev/null || true)
+    printf '%s\n' "${out}" | grep -E '^[0-9]+\.' | head -1 || true
 }
 
 # -----------------------------------------------------------------------------
