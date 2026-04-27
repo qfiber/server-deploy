@@ -88,53 +88,98 @@ else
         warn "Invalid port."
     done
 
-    # ---- Mail admin panel ----
-    echo
-    info "Mail admin panel (Stalwart web UI) — IP-allowlisted only."
     DOMAIN_PART="${SERVER_HOSTNAME#*.}"
-    prompt MAIL_ADMIN_HOST "Mail admin panel hostname" "mail.${DOMAIN_PART}"
-    valid_domain "${MAIL_ADMIN_HOST}" || die "Invalid FQDN."
-    while :; do
-        prompt_required MAIL_ADMIN_ALLOWLIST "Admin allowlist (IP/CIDR, comma-separated; v4+v6 both OK)"
-        ok=1
-        IFS=',' read -ra entries <<<"${MAIL_ADMIN_ALLOWLIST}"
-        for e in "${entries[@]}"; do
-            e="${e//[[:space:]]/}"
-            valid_ip_or_cidr "${e}" || { warn "Invalid: '${e}'"; ok=0; break; }
-        done
-        [[ ${ok} -eq 1 ]] && break
-    done
 
-    # ---- DKIM selector ----
-    prompt DKIM_SELECTOR "DKIM selector (per-server)" "default"
-
-    # ---- DB admin tooling ----
+    # ---- Database engines ----
     echo
-    info "Database admin tooling (optional — extra attack surface, allowlisted+basic-auth)"
-    info "  1) phpMyAdmin (MariaDB)"
-    info "  2) pgAdmin4   (Postgres)"
+    info "Database engines (skip if this server doesn't host apps that need a DB)"
+    info "  1) MariaDB"
+    info "  2) PostgreSQL"
     info "  3) Both"
     info "  4) None"
     while :; do
-        prompt TOOLS_CHOICE "Choice [1-4]" "4"
-        case "${TOOLS_CHOICE}" in 1|2|3|4) break ;; *) warn "Pick 1-4." ;; esac
+        prompt DB_CHOICE "Choice [1-4]" "3"
+        case "${DB_CHOICE}" in 1|2|3|4) break ;; *) warn "Pick 1-4." ;; esac
     done
+    INSTALL_MARIADB="no"
+    INSTALL_POSTGRES="no"
+    case "${DB_CHOICE}" in
+        1) INSTALL_MARIADB="yes" ;;
+        2) INSTALL_POSTGRES="yes" ;;
+        3) INSTALL_MARIADB="yes"; INSTALL_POSTGRES="yes" ;;
+    esac
+
+    # ---- Database admin tooling (only applicable to installed engines) ----
     INSTALL_PMA="no"
     INSTALL_PGA="no"
     PMA_HOST=""
     PGA_HOST=""
-    case "${TOOLS_CHOICE}" in
-        1) INSTALL_PMA="yes" ;;
-        2) INSTALL_PGA="yes" ;;
-        3) INSTALL_PMA="yes"; INSTALL_PGA="yes" ;;
-    esac
-    if [[ "${INSTALL_PMA}" == "yes" ]]; then
-        prompt PMA_HOST "phpMyAdmin hostname" "pma.${DOMAIN_PART}"
-        valid_domain "${PMA_HOST}" || die "Invalid FQDN."
+    if [[ "${INSTALL_MARIADB}" == "yes" || "${INSTALL_POSTGRES}" == "yes" ]]; then
+        echo
+        info "Database admin tooling (optional — extra attack surface, allowlisted+basic-auth)"
+        if [[ "${INSTALL_MARIADB}" == "yes" && "${INSTALL_POSTGRES}" == "yes" ]]; then
+            info "  1) phpMyAdmin (MariaDB)"
+            info "  2) pgAdmin4   (Postgres)"
+            info "  3) Both"
+            info "  4) None"
+            while :; do
+                prompt TOOLS_CHOICE "Choice [1-4]" "4"
+                case "${TOOLS_CHOICE}" in 1|2|3|4) break ;; *) warn "Pick 1-4." ;; esac
+            done
+            case "${TOOLS_CHOICE}" in
+                1) INSTALL_PMA="yes" ;;
+                2) INSTALL_PGA="yes" ;;
+                3) INSTALL_PMA="yes"; INSTALL_PGA="yes" ;;
+            esac
+        elif [[ "${INSTALL_MARIADB}" == "yes" ]]; then
+            prompt_yes_no PMA_YN "Install phpMyAdmin?" "n"
+            [[ "${PMA_YN}" == "yes" ]] && INSTALL_PMA="yes"
+        else
+            prompt_yes_no PGA_YN "Install pgAdmin4?" "n"
+            [[ "${PGA_YN}" == "yes" ]] && INSTALL_PGA="yes"
+        fi
+        if [[ "${INSTALL_PMA}" == "yes" ]]; then
+            prompt PMA_HOST "phpMyAdmin hostname" "pma.${DOMAIN_PART}"
+            valid_domain "${PMA_HOST}" || die "Invalid FQDN."
+        fi
+        if [[ "${INSTALL_PGA}" == "yes" ]]; then
+            prompt PGA_HOST "pgAdmin4 hostname" "pga.${DOMAIN_PART}"
+            valid_domain "${PGA_HOST}" || die "Invalid FQDN."
+        fi
     fi
-    if [[ "${INSTALL_PGA}" == "yes" ]]; then
-        prompt PGA_HOST "pgAdmin4 hostname" "pga.${DOMAIN_PART}"
-        valid_domain "${PGA_HOST}" || die "Invalid FQDN."
+
+    # ---- Stalwart user mail server (optional) ----
+    echo
+    info "Stalwart user mail server (inbound mail on :25, IMAP/SMTP submission, web admin)."
+    info "Skip if this server doesn't host mailboxes — outbound alerts use the relay below."
+    prompt_yes_no INSTALL_STALWART "Install Stalwart mail server?" "n"
+    MAIL_ADMIN_HOST=""
+    DKIM_SELECTOR=""
+    if [[ "${INSTALL_STALWART}" == "yes" ]]; then
+        prompt MAIL_ADMIN_HOST "Mail admin panel hostname" "mail.${DOMAIN_PART}"
+        valid_domain "${MAIL_ADMIN_HOST}" || die "Invalid FQDN."
+        prompt DKIM_SELECTOR "DKIM selector (per-server)" "default"
+    fi
+
+    # ---- Admin allowlist (only if at least one admin endpoint will exist) ----
+    MAIL_ADMIN_ALLOWLIST=""
+    if [[ "${INSTALL_PMA}" == "yes" || "${INSTALL_PGA}" == "yes" || "${INSTALL_STALWART}" == "yes" ]]; then
+        admin_list=()
+        [[ "${INSTALL_PMA}" == "yes" ]]      && admin_list+=("phpMyAdmin")
+        [[ "${INSTALL_PGA}" == "yes" ]]      && admin_list+=("pgAdmin4")
+        [[ "${INSTALL_STALWART}" == "yes" ]] && admin_list+=("Stalwart admin")
+        echo
+        info "Admin allowlist (used for: $(IFS=, ; echo "${admin_list[*]}"))"
+        while :; do
+            prompt_required MAIL_ADMIN_ALLOWLIST "IP/CIDR list (comma-separated; v4+v6 both OK)"
+            ok=1
+            IFS=',' read -ra entries <<<"${MAIL_ADMIN_ALLOWLIST}"
+            for e in "${entries[@]}"; do
+                e="${e//[[:space:]]/}"
+                valid_ip_or_cidr "${e}" || { warn "Invalid: '${e}'"; ok=0; break; }
+            done
+            [[ ${ok} -eq 1 ]] && break
+        done
     fi
 
     # ---- Outbound mail relay ----
@@ -336,7 +381,12 @@ SMTP_PASS="${SMTP_PASS}"
 SMTP_TLS="${SMTP_TLS}"
 SMTP_FROM="${SMTP_FROM}"
 
-# === Mail (Stalwart) admin panel ===
+# === Database engines ===
+INSTALL_MARIADB="${INSTALL_MARIADB}"
+INSTALL_POSTGRES="${INSTALL_POSTGRES}"
+
+# === Stalwart user mail server (inbound) ===
+INSTALL_STALWART="${INSTALL_STALWART}"
 MAIL_ADMIN_HOST="${MAIL_ADMIN_HOST}"
 MAIL_ADMIN_ALLOWLIST="${MAIL_ADMIN_ALLOWLIST}"
 
@@ -686,10 +736,18 @@ firewall-cmd --zone="${ZONE}" --add-port="${SSH_PORT_NEW}/tcp" --permanent
 firewall-cmd --zone="${ZONE}" --add-service=http --permanent
 firewall-cmd --zone="${ZONE}" --add-service=https --permanent
 firewall-cmd --zone="${ZONE}" --add-port=443/udp --permanent
-firewall-cmd --zone="${ZONE}" --add-service=smtp --permanent
-firewall-cmd --zone="${ZONE}" --add-service=smtps --permanent
-firewall-cmd --zone="${ZONE}" --add-port=587/tcp --permanent
-firewall-cmd --zone="${ZONE}" --add-service=imaps --permanent
+if [[ "${INSTALL_STALWART:-no}" == "yes" ]]; then
+    firewall-cmd --zone="${ZONE}" --add-service=smtp --permanent
+    firewall-cmd --zone="${ZONE}" --add-service=smtps --permanent
+    firewall-cmd --zone="${ZONE}" --add-port=587/tcp --permanent
+    firewall-cmd --zone="${ZONE}" --add-service=imaps --permanent
+else
+    # Tear down mail ports if a previous install opened them
+    firewall-cmd --zone="${ZONE}" --remove-service=smtp   --permanent 2>/dev/null || true
+    firewall-cmd --zone="${ZONE}" --remove-service=smtps  --permanent 2>/dev/null || true
+    firewall-cmd --zone="${ZONE}" --remove-port=587/tcp   --permanent 2>/dev/null || true
+    firewall-cmd --zone="${ZONE}" --remove-service=imaps  --permanent 2>/dev/null || true
+fi
 firewall-cmd --reload
 success "firewalld configured (zone: ${ZONE})."
 

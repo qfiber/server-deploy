@@ -21,6 +21,11 @@ source "${REPO_DIR}/lib/common.sh"
 require_root
 load_config
 
+if [[ "${INSTALL_STALWART:-no}" != "yes" ]]; then
+    info "Stalwart mail server not selected (INSTALL_STALWART=${INSTALL_STALWART:-no}) — skipping."
+    exit 0
+fi
+
 [[ -n "${SERVER_HOSTNAME:-}" ]]      || die "SERVER_HOSTNAME missing — run 00-base.sh first."
 [[ -n "${MAIL_ADMIN_HOST:-}" ]]      || die "MAIL_ADMIN_HOST missing."
 [[ -n "${MAIL_ADMIN_ALLOWLIST:-}" ]] || die "MAIL_ADMIN_ALLOWLIST missing."
