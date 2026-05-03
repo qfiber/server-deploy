@@ -28,7 +28,7 @@ CADDY_HOME=/var/lib/caddy
 CADDY_CONF=/etc/caddy
 CADDY_LOG=/var/log/caddy
 CRS_DIR=/etc/caddy/coraza/crs
-CRS_VERSION="${CRS_VERSION:-v4.7.0}"
+CRS_VERSION="${CRS_VERSION:-v4.25.0}"
 
 # -----------------------------------------------------------------------------
 # 1. Caddy with coraza-caddy + caddy-ratelimit
